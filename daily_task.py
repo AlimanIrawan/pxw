@@ -113,10 +113,10 @@ def commit_to_github(target_date, files, logger):
     try:
         logger.info("开始提交到GitHub...")
         
-        # 配置Git用户信息（如果未设置）
-        subprocess.run(['git', 'config', '--global', 'user.email', 'crawler@detik.com'], 
+        # 配置Git用户信息（本地仓库配置，不使用--global）
+        subprocess.run(['git', 'config', 'user.email', 'crawler@detik.com'], 
                       check=False, capture_output=True)
-        subprocess.run(['git', 'config', '--global', 'user.name', 'Detik Crawler'], 
+        subprocess.run(['git', 'config', 'user.name', 'Detik Crawler'], 
                       check=False, capture_output=True)
         
         # 添加文件到Git

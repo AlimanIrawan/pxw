@@ -105,11 +105,29 @@ def get_status():
 @app.route('/download/<filename>')
 def download_file(filename):
     """下载文件"""
+    # 首先尝试在output根目录查找
     file_path = os.path.join('output', filename)
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
-    else:
-        return jsonify({'error': '文件不存在'})
+    
+    # 如果不存在，尝试在latest目录查找
+    latest_path = os.path.join('output', 'latest', filename)
+    if os.path.exists(latest_path):
+        return send_file(latest_path, as_attachment=True)
+    
+    # 尝试在日期子目录中查找
+    if 'detik_news_' in filename:
+        # 从文件名中提取日期
+        import re
+        date_match = re.search(r'detik_news_(\d{4}-\d{2}-\d{2})', filename)
+        if date_match:
+            date_str = date_match.group(1)
+            date_path = os.path.join('output', date_str, filename)
+            if os.path.exists(date_path):
+                return send_file(date_path, as_attachment=True)
+    
+    # 如果所有路径都不存在，返回错误
+    return jsonify({'error': f'文件不存在: {filename}'})
 
 @app.route('/logs')
 def get_logs():
@@ -289,6 +307,10 @@ def commit_to_github(target_date, files):
                 shutil.copy2(src, dst)
         
         # Git操作
+        # 配置Git用户信息（云端环境需要）
+        subprocess.run(['git', 'config', 'user.email', 'crawler@detik.com'], check=False)
+        subprocess.run(['git', 'config', 'user.name', 'Detik Crawler'], check=False)
+        
         subprocess.run(['git', 'add', 'output/'], check=True)
         commit_msg = f"Auto crawl: {target_date} - {len(files)} files"
         subprocess.run(['git', 'commit', '-m', commit_msg], check=True)
