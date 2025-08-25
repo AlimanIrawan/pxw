@@ -15,6 +15,7 @@ import schedule
 import time
 
 from detik_crawler import DetikCrawler
+from simple_crawler import SimpleCrawler
 from data_processor import DataProcessor
 from config import ConfigManager
 from logger import get_logger
@@ -118,14 +119,31 @@ def run_crawler(target_date):
         task_status['progress'] = 10
         task_status['message'] = '🔧 正在设置爬虫配置...'
         
-        crawler = DetikCrawler(config)
         processor = DataProcessor(config)
         task_status['progress'] = 15
-        task_status['message'] = '✅ 爬虫初始化完成，开始Chrome设置...'
         
-        # 步骤2: 开始爬取
-        task_status['message'] = '🕷️ 正在启动Chrome浏览器...'
-        task_status['progress'] = 20
+        # 尝试使用Chrome爬虫，失败则使用简化爬虫
+        crawler = None
+        use_simple_crawler = False
+        
+        if os.environ.get('RENDER'):
+            # 云端环境：直接使用简化爬虫
+            task_status['message'] = '🔧 云端环境，使用简化爬虫...'
+            crawler = SimpleCrawler(config)
+            use_simple_crawler = True
+            task_status['progress'] = 20
+        else:
+            # 本地环境：尝试Chrome爬虫
+            try:
+                task_status['message'] = '🕷️ 正在启动Chrome浏览器...'
+                crawler = DetikCrawler(config)
+                task_status['progress'] = 20
+            except Exception as e:
+                logger.warning(f"Chrome爬虫初始化失败，切换到简化爬虫: {e}")
+                task_status['message'] = '🔧 Chrome失败，使用简化爬虫...'
+                crawler = SimpleCrawler(config)
+                use_simple_crawler = True
+                task_status['progress'] = 20
         
         # 自定义进度回调
         def progress_callback(current, total, message):
@@ -300,11 +318,14 @@ def ensure_directories():
     directories = ['output', 'logs', 'templates', 'output/latest']
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
-        logger.info(f"确保目录存在: {directory}")
+        if logger:
+            logger.info(f"确保目录存在: {directory}")
+
+# 在应用启动时创建目录
+ensure_directories()
 
 if __name__ == '__main__':
-    # 创建必要的目录
-    ensure_directories()
+    # 应用已经创建了目录
     
     # 设置定时任务（仅在云端环境）
     if os.environ.get('RENDER'):

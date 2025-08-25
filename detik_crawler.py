@@ -155,7 +155,6 @@ class DetikCrawler:
                 
                 # 修复webdriver-manager路径问题
                 if 'THIRD_PARTY_NOTICES.chromedriver' in driver_path:
-                    import os
                     driver_dir = os.path.dirname(driver_path)
                     actual_driver_path = os.path.join(driver_dir, 'chromedriver')
                     if os.path.exists(actual_driver_path):
@@ -163,7 +162,6 @@ class DetikCrawler:
                 
                 # 设置ChromeDriver权限
                 self.logger.info(f"设置ChromeDriver权限: {driver_path}")
-                import os
                 os.chmod(driver_path, 0o755)
                 
                 # 移除macOS安全属性
