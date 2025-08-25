@@ -1,0 +1,23 @@
+services:
+  # Web服务 - 提供控制界面
+  - type: web
+    name: detik-crawler-web
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.18
+      - key: PORT
+        value: 10000
+
+  # 定时任务 - 每日凌晨3点爬取
+  - type: cron
+    name: detik-crawler-daily
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    schedule: "0 3 * * *"  # 每天凌晨3点 UTC（北京时间11点）
+    startCommand: "python daily_task.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.18

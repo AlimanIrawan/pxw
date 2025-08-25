@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detik新闻爬虫 - 云端控制台</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.8;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        input[type="date"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="date"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .progress-container {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        
+        .status-message {
+            text-align: center;
+            font-weight: 500;
+            color: #2c3e50;
+        }
+        
+        .files-container {
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .file-info h4 {
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+        
+        .file-info p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .btn-download {
+            padding: 8px 16px;
+            background: #27ae60;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .btn-download:hover {
+            background: #219a52;
+        }
+        
+        .logs-container {
+            margin-top: 30px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            display: none;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🕷️ Detik新闻爬虫</h1>
+            <p>云端自动化新闻爬取系统</p>
+        </div>
+        
+        <div class="content">
+            <div id="alert-container"></div>
+            
+            <div class="form-group">
+                <label for="crawl-date">选择爬取日期：</label>
+                <input type="date" id="crawl-date" name="crawl-date">
+            </div>
+            
+            <button id="start-btn" class="btn btn-primary" onclick="startCrawl()">
+                🚀 开始爬取
+            </button>
+            
+            <div id="progress-container" class="progress-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <div id="status-message" class="status-message">准备开始...</div>
+            </div>
+            
+            <div id="files-container" class="files-container">
+                <h3>📁 生成的文件</h3>
+                <div id="files-list"></div>
+            </div>
+            
+            <div id="logs-container" class="logs-container">
+                <div id="logs-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 设置默认日期为昨天
+        document.addEventListener('DOMContentLoaded', function() {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            document.getElementById('crawl-date').value = yesterday.toISOString().split('T')[0];
+        });
+
+        function startCrawl() {
+            const date = document.getElementById('crawl-date').value;
+            if (!date) {
+                showAlert('请选择日期', 'error');
+                return;
+            }
+
+            const startBtn = document.getElementById('start-btn');
+            startBtn.disabled = true;
+            startBtn.textContent = '🔄 爬取中...';
+
+            document.getElementById('progress-container').style.display = 'block';
+            document.getElementById('files-container').style.display = 'none';
+            document.getElementById('logs-container').style.display = 'block';
+
+            fetch('/start_crawl', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ date: date })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('爬虫已启动，正在处理...', 'success');
+                    monitorProgress();
+                } else {
+                    showAlert(data.error, 'error');
+                    resetButton();
+                }
+            })
+            .catch(error => {
+                showAlert('启动失败: ' + error.message, 'error');
+                resetButton();
+            });
+        }
+
+        function monitorProgress() {
+            const interval = setInterval(() => {
+                fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    updateProgress(data.progress);
+                    updateStatus(data.message);
+                    
+                    if (!data.running) {
+                        clearInterval(interval);
+                        resetButton();
+                        
+                        if (data.output_files && data.output_files.length > 0) {
+                            showFiles(data.output_files);
+                            showAlert(`爬取完成！共获取 ${data.total_news} 篇新闻`, 'success');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('获取状态失败:', error);
+                });
+                
+                // 更新日志
+                updateLogs();
+            }, 2000);
+        }
+
+        function updateProgress(progress) {
+            document.getElementById('progress-fill').style.width = progress + '%';
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status-message').textContent = message;
+        }
+
+        function updateLogs() {
+            fetch('/logs')
+            .then(response => response.json())
+            .then(data => {
+                const logsContent = document.getElementById('logs-content');
+                logsContent.innerHTML = data.logs.join('<br>');
+                logsContent.scrollTop = logsContent.scrollHeight;
+            });
+        }
+
+        function showFiles(files) {
+            const filesContainer = document.getElementById('files-container');
+            const filesList = document.getElementById('files-list');
+            
+            filesList.innerHTML = '';
+            files.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <h4>${file.name}</h4>
+                        <p>大小: ${formatFileSize(file.size)}</p>
+                    </div>
+                    <a href="${file.url}" class="btn-download">📥 下载</a>
+                `;
+                filesList.appendChild(fileItem);
+            });
+            
+            filesContainer.style.display = 'block';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function resetButton() {
+            const startBtn = document.getElementById('start-btn');
+            startBtn.disabled = false;
+            startBtn.textContent = '🚀 开始爬取';
+        }
+
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            
+            alertContainer.innerHTML = '';
+            alertContainer.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
