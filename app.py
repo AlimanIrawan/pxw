@@ -311,10 +311,14 @@ def commit_to_github(target_date, files):
         subprocess.run(['git', 'config', 'user.email', 'crawler@detik.com'], check=False)
         subprocess.run(['git', 'config', 'user.name', 'Detik Crawler'], check=False)
         
+        # 确保在main分支上
+        subprocess.run(['git', 'checkout', 'main'], check=False)
+        subprocess.run(['git', 'pull', 'origin', 'main'], check=False)
+        
         subprocess.run(['git', 'add', 'output/'], check=True)
         commit_msg = f"Auto crawl: {target_date} - {len(files)} files"
         subprocess.run(['git', 'commit', '-m', commit_msg], check=True)
-        subprocess.run(['git', 'push'], check=True)
+        subprocess.run(['git', 'push', 'origin', 'main'], check=True)
         
         logger.info(f"成功提交到GitHub: {commit_msg}")
         

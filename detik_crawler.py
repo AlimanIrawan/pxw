@@ -1143,16 +1143,16 @@ class DetikCrawler:
                         if wib_match:
                             time_text = wib_match.group(0).strip()
                     
-                    # 调试日志 - 记录提取到的信息
+                    # 调试日志 - 记录提取到的信息（改为INFO级别便于调试）
                     if time_text or title_text:
-                        self.logger.debug(f"检查新闻项目 - 时间: '{time_text}', 标题: '{title_text[:30]}...'")
+                        self.logger.info(f"🔍 检查新闻项目 - 时间: '{time_text}', 标题: '{title_text[:30]}...'")
                     
                     # 使用原有的时间解析逻辑
                     if self._parse_time_info(time_text, title_text, target_date):
                         news_urls.append(full_url)
-                        self.logger.info(f"找到目标日期新闻: {title_text[:50]}...")
+                        self.logger.info(f"✅ 找到目标日期新闻: {title_text[:50]}...")
                     elif time_text:
-                        self.logger.debug(f"时间不匹配: '{time_text}' vs 目标日期: {target_date.strftime('%Y-%m-%d')}")
+                        self.logger.info(f"❌ 时间不匹配: '{time_text}' vs 目标日期: {target_date.strftime('%Y-%m-%d')}")
                     
                 except Exception as e:
                     self.logger.debug(f"处理新闻项目时出错: {e}")
