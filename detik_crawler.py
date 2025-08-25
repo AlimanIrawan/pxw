@@ -1126,17 +1126,33 @@ class DetikCrawler:
                     if not full_url.startswith('https://news.detik.com/berita'):
                         continue
                     
-                    # 查找时间信息
-                    time_element = item.select_one(".media__date, .list-content__date, [class*='date'], [class*='time'], time")
+                    # 查找时间信息 - 扩展选择器
+                    time_element = item.select_one(".media__date, .list-content__date, [class*='date'], [class*='time'], time, .date, .time, .timestamp")
                     title_element = item.select_one(".media__title, .list-content__title, h2, h3, h4, a")
                     
                     time_text = time_element.get_text(strip=True) if time_element else ""
                     title_text = title_element.get_text(strip=True) if title_element else ""
                     
+                    # 如果没有找到时间元素，尝试从整个项目中查找时间信息
+                    if not time_text:
+                        # 查找包含时间格式的所有文本
+                        all_text = item.get_text()
+                        import re
+                        # 查找WIB格式的时间
+                        wib_match = re.search(r'[^.]*\d{1,2}\s+\w+\s+\d{4}\s+\d{1,2}:\d{2}\s+WIB[^.]*', all_text)
+                        if wib_match:
+                            time_text = wib_match.group(0).strip()
+                    
+                    # 调试日志 - 记录提取到的信息
+                    if time_text or title_text:
+                        self.logger.debug(f"检查新闻项目 - 时间: '{time_text}', 标题: '{title_text[:30]}...'")
+                    
                     # 使用原有的时间解析逻辑
                     if self._parse_time_info(time_text, title_text, target_date):
                         news_urls.append(full_url)
-                        self.logger.debug(f"找到目标日期新闻: {title_text[:50]}...")
+                        self.logger.info(f"找到目标日期新闻: {title_text[:50]}...")
+                    elif time_text:
+                        self.logger.debug(f"时间不匹配: '{time_text}' vs 目标日期: {target_date.strftime('%Y-%m-%d')}")
                     
                 except Exception as e:
                     self.logger.debug(f"处理新闻项目时出错: {e}")
