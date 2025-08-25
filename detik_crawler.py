@@ -6,6 +6,7 @@ Detik网站爬虫模块
 """
 
 import time
+import os
 import requests
 from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse
@@ -83,9 +84,11 @@ class DetikCrawler:
             chrome_options.add_argument('--disable-extensions')
             chrome_options.add_argument('--disable-plugins')
             chrome_options.add_argument('--disable-images')
-            chrome_options.add_argument('--disable-javascript')
             chrome_options.add_argument('--virtual-time-budget=5000')
             chrome_options.add_argument('--run-all-compositor-stages-before-draw')
+            chrome_options.add_argument('--disable-web-security')
+            chrome_options.add_argument('--allow-running-insecure-content')
+            chrome_options.add_argument('--disable-features=VizDisplayCompositor')
             self.logger.info("使用云端Linux环境配置")
         else:
             # 本地macOS环境配置

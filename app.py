@@ -295,11 +295,16 @@ def setup_scheduler():
     scheduler_thread = Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
 
+def ensure_directories():
+    """确保必要的目录存在"""
+    directories = ['output', 'logs', 'templates', 'output/latest']
+    for directory in directories:
+        os.makedirs(directory, exist_ok=True)
+        logger.info(f"确保目录存在: {directory}")
+
 if __name__ == '__main__':
     # 创建必要的目录
-    os.makedirs('output', exist_ok=True)
-    os.makedirs('logs', exist_ok=True)
-    os.makedirs('templates', exist_ok=True)
+    ensure_directories()
     
     # 设置定时任务（仅在云端环境）
     if os.environ.get('RENDER'):
