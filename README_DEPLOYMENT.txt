@@ -22,13 +22,28 @@ git remote add origin https://github.com/你的用户名/detik-crawler.git
 git push -u origin main
 ```
 
-第二步：在Render部署
+第二步：在Render部署（免费方案）
+
+方案A：使用Blueprint（推荐）
 1. 登录Render控制台
 2. 点击"New" -> "Blueprint"
 3. 连接GitHub仓库
-4. 选择刚创建的detik-crawler仓库
+4. 选择刚创建的仓库
 5. Render会自动读取render.yaml配置
 6. 点击"Apply"开始部署
+
+方案B：手动创建Web Service（如果Blueprint显示收费）
+1. 登录Render控制台
+2. 点击"New" -> "Web Service"
+3. 连接GitHub仓库
+4. 选择刚创建的仓库
+5. 配置如下：
+   - Name: detik-crawler
+   - Environment: Python 3
+   - Build Command: pip install -r requirements.txt
+   - Start Command: gunicorn app:app
+   - Plan: Free (选择免费套餐)
+6. 点击"Create Web Service"
 
 第三步：配置环境变量（可选）
 在Render控制台的Environment设置中添加：

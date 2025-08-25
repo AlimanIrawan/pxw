@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, send_file
 from threading import Thread
 import logging
+import schedule
+import time
 
 from detik_crawler import DetikCrawler
 from data_processor import DataProcessor
@@ -205,11 +207,62 @@ def commit_to_github(target_date, files):
     except Exception as e:
         logger.error(f"GitHub提交失败: {e}")
 
+def daily_auto_crawl():
+    """每日自动爬取任务"""
+    try:
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        logger.info(f"开始执行每日自动爬取任务，目标日期: {yesterday}")
+        
+        config = ConfigManager()
+        crawler = DetikCrawler(config)
+        processor = DataProcessor(config)
+        
+        # 爬取新闻
+        news_data = crawler.crawl_news(yesterday)
+        
+        if news_data:
+            # 保存数据
+            processor.save_news_data(news_data, yesterday)
+            
+            # 提交到GitHub（如果在云端环境）
+            if os.environ.get('RENDER'):
+                from daily_task import organize_and_commit_files
+                organize_and_commit_files(yesterday, logger)
+            
+            logger.info(f"每日自动爬取完成，共获取 {len(news_data)} 篇新闻")
+        else:
+            logger.warning("每日自动爬取未获取到数据")
+            
+    except Exception as e:
+        logger.error(f"每日自动爬取失败: {e}")
+
+def setup_scheduler():
+    """设置定时任务"""
+    # 每天凌晨3点UTC执行（北京时间11点）
+    schedule.every().day.at("03:00").do(daily_auto_crawl)
+    logger.info("定时任务已设置：每天凌晨3点UTC自动爬取")
+    
+    def run_scheduler():
+        while True:
+            schedule.run_pending()
+            time.sleep(60)  # 每分钟检查一次
+    
+    # 在后台线程中运行定时器
+    scheduler_thread = Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start()
+
 if __name__ == '__main__':
     # 创建必要的目录
     os.makedirs('output', exist_ok=True)
     os.makedirs('logs', exist_ok=True)
     os.makedirs('templates', exist_ok=True)
+    
+    # 设置定时任务（仅在云端环境）
+    if os.environ.get('RENDER'):
+        setup_scheduler()
+        logger.info("云端环境：定时任务已启动")
+    else:
+        logger.info("本地环境：跳过定时任务设置")
     
     # 运行应用
     port = int(os.environ.get('PORT', 5000))
