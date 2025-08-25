@@ -479,6 +479,35 @@
             // 更新新闻计数
             const newsCount = `${data.current_news || 0}/${data.total_news || 0} 新闻`;
             document.getElementById('news-count').textContent = newsCount;
+            
+            // 更新实时日志
+            if (data.logs && data.logs.length > 0) {
+                const logsContainer = document.getElementById('real-time-logs');
+                logsContainer.innerHTML = ''; // 清空现有日志
+                
+                data.logs.forEach(log => {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'log-entry';
+                    
+                    // 根据日志级别设置颜色
+                    if (log.level === 'error') {
+                        logEntry.className += ' error';
+                    } else if (log.level === 'warning') {
+                        logEntry.className += ' warning';
+                    } else if (log.level === 'success') {
+                        logEntry.className += ' success';
+                    } else {
+                        logEntry.className += ' info';
+                    }
+                    
+                    logEntry.textContent = `[${log.timestamp}] ${log.message}`;
+                    logsContainer.appendChild(logEntry);
+                });
+                
+                // 滚动到底部
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+                logsContainer.style.display = 'block';
+            }
         }
 
         function updateRealTimeLogs() {

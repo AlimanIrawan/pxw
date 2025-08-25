@@ -27,6 +27,29 @@ app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-product
 logging.basicConfig(level=logging.INFO)
 logger = get_logger()
 
+def add_task_log(message, level='info'):
+    """添加日志到任务状态"""
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    log_entry = {
+        'timestamp': timestamp,
+        'level': level,
+        'message': message
+    }
+    task_status['logs'].append(log_entry)
+    
+    # 只保留最近100条日志
+    if len(task_status['logs']) > 100:
+        task_status['logs'] = task_status['logs'][-100:]
+    
+    # 同时写入标准日志
+    if level == 'error':
+        logger.error(message)
+    elif level == 'warning':
+        logger.warning(message)
+    else:
+        logger.info(message)
+
 # 全局变量存储任务状态
 task_status = {
     'running': False,
@@ -34,7 +57,8 @@ task_status = {
     'message': '准备就绪',
     'total_news': 0,
     'current_news': 0,
-    'output_files': []
+    'output_files': [],
+    'logs': []  # 实时日志缓存
 }
 
 @app.route('/')
@@ -57,13 +81,15 @@ def start_crawl():
         return jsonify({'error': '请选择日期'})
     
     # 重置任务状态
+    global task_status
     task_status = {
         'running': True,
         'progress': 0,
         'message': '正在初始化...',
         'total_news': 0,
         'current_news': 0,
-        'output_files': []
+        'output_files': [],
+        'logs': []
     }
     
     # 在后台线程中运行爬虫
@@ -112,15 +138,18 @@ def run_crawler(target_date):
         # 步骤1: 初始化
         task_status['message'] = '🔧 正在初始化爬虫组件...'
         task_status['progress'] = 5
-        logger.info(f"开始爬取任务，目标日期: {target_date}")
+        task_status['logs'] = []  # 清空之前的日志
+        add_task_log(f"🚀 开始爬取任务，目标日期: {target_date}")
         
         # 初始化组件
         config = ConfigManager()
         task_status['progress'] = 10
         task_status['message'] = '🔧 正在设置爬虫配置...'
+        add_task_log("📝 初始化配置管理器")
         
         processor = DataProcessor(config)
         task_status['progress'] = 15
+        add_task_log("💾 初始化数据处理器")
         
         # 尝试使用Chrome爬虫，失败则使用简化爬虫
         crawler = None
@@ -129,6 +158,7 @@ def run_crawler(target_date):
         if os.environ.get('RENDER'):
             # 云端环境：直接使用简化爬虫
             task_status['message'] = '🔧 云端环境，使用简化爬虫...'
+            add_task_log("☁️ 检测到云端环境，使用简化爬虫")
             crawler = SimpleCrawler(config)
             use_simple_crawler = True
             task_status['progress'] = 20
@@ -136,11 +166,13 @@ def run_crawler(target_date):
             # 本地环境：尝试Chrome爬虫
             try:
                 task_status['message'] = '🕷️ 正在启动Chrome浏览器...'
+                add_task_log("🌐 本地环境，尝试启动Chrome爬虫")
                 crawler = DetikCrawler(config)
                 task_status['progress'] = 20
             except Exception as e:
-                logger.warning(f"Chrome爬虫初始化失败，切换到简化爬虫: {e}")
+                add_task_log(f"⚠️ Chrome爬虫初始化失败: {e}", "warning")
                 task_status['message'] = '🔧 Chrome失败，使用简化爬虫...'
+                add_task_log("🔄 切换到简化爬虫")
                 crawler = SimpleCrawler(config)
                 use_simple_crawler = True
                 task_status['progress'] = 20
@@ -155,28 +187,37 @@ def run_crawler(target_date):
                 task_status['message'] = message
         
         # 爬取新闻
+        add_task_log(f"🚀 开始爬取新闻数据")
         news_data = crawler.crawl_news(target_date)
         
         if not news_data:
             task_status['running'] = False
             task_status['message'] = '❌ 未获取到新闻数据，请检查日期或网络连接'
             task_status['progress'] = 0
-            logger.warning("爬取结果为空")
+            add_task_log("❌ 爬取结果为空", "error")
             return
         
         task_status['total_news'] = len(news_data)
         task_status['current_news'] = len(news_data)
         task_status['progress'] = 70
         task_status['message'] = f'✅ 爬取完成！共获取 {len(news_data)} 篇新闻'
-        logger.info(f"爬取成功，共获取 {len(news_data)} 篇新闻")
+        add_task_log(f"✅ 爬取成功，共获取 {len(news_data)} 篇新闻", "success")
         
         # 步骤3: 保存数据
         task_status['message'] = '💾 正在保存数据文件...'
         task_status['progress'] = 75
+        add_task_log("💾 开始保存数据到文件")
         
-        output_file = processor.save_news_data(news_data, target_date)
-        task_status['progress'] = 80
-        task_status['message'] = '✅ 数据文件保存完成'
+        try:
+            output_file = processor.save_news_data(news_data, target_date)
+            task_status['progress'] = 80
+            task_status['message'] = '✅ 数据文件保存完成'
+            add_task_log(f"✅ 数据文件保存成功: {output_file}", "success")
+        except Exception as e:
+            add_task_log(f"❌ 数据文件保存失败: {e}", "error")
+            task_status['running'] = False
+            task_status['message'] = '❌ 数据文件保存失败'
+            return
         
         # 记录输出文件
         output_dir = config.get_output_dir()

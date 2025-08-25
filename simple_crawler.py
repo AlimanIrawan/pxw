@@ -72,9 +72,11 @@ class SimpleCrawler:
         try:
             target_date_obj = datetime.strptime(target_date, '%Y-%m-%d')
             all_urls = []
+            max_pages = 50  # 最大页面数保护
+            consecutive_empty_pages = 0  # 连续空页面计数
+            max_empty_pages = 3  # 连续3页没有相关新闻就停止
             
-            # 简化版：只爬取前5页
-            for page in range(1, 6):
+            for page in range(1, max_pages + 1):
                 url = f"{self.base_url}/indeks?page={page}"
                 self.logger.info(f"正在爬取第 {page} 页: {url}")
                 
@@ -88,11 +90,21 @@ class SimpleCrawler:
                     if page_urls:
                         all_urls.extend(page_urls)
                         self.logger.info(f"第 {page} 页找到 {len(page_urls)} 个新闻链接")
+                        consecutive_empty_pages = 0  # 重置空页面计数
                     else:
-                        self.logger.info(f"第 {page} 页没有找到相关新闻")
+                        consecutive_empty_pages += 1
+                        self.logger.info(f"第 {page} 页没有找到相关新闻 (连续空页面: {consecutive_empty_pages})")
+                        
+                        # 如果连续多页都没有找到相关新闻，停止爬取
+                        if consecutive_empty_pages >= max_empty_pages:
+                            self.logger.info(f"连续 {max_empty_pages} 页没有找到相关新闻，停止爬取")
+                            break
                         
                 except Exception as e:
                     self.logger.error(f"爬取第 {page} 页失败: {e}")
+                    consecutive_empty_pages += 1
+                    if consecutive_empty_pages >= max_empty_pages:
+                        break
                     continue
                 
                 time.sleep(1)  # 页面间延迟
@@ -111,23 +123,61 @@ class SimpleCrawler:
         try:
             # 查找新闻链接
             links = soup.find_all('a', href=True)
+            target_date_str = target_date.strftime('%Y-%m-%d')
             
             for link in links:
                 href = link.get('href')
-                if href and '/berita/' in href and 'detik.com' in href:
-                    # 只处理 news.detik.com/berita 开头的链接
+                if href and '/berita/' in href:
+                    # 构建完整URL
                     if href.startswith('https://news.detik.com/berita'):
-                        urls.append(href)
+                        full_url = href
                     elif href.startswith('/berita/'):
                         full_url = urljoin(self.base_url, href)
-                        urls.append(full_url)
+                    elif 'detik.com' in href and '/berita/' in href:
+                        full_url = href
+                    else:
+                        continue
+                    
+                    # 只处理 news.detik.com/berita 开头的链接
+                    if full_url.startswith('https://news.detik.com/berita'):
+                        # 尝试从URL中提取日期进行过滤
+                        if self._is_url_from_target_date(full_url, target_date_str):
+                            urls.append(full_url)
+                        else:
+                            # 如果无法从URL判断日期，也加入列表（后续会检查文章内容的日期）
+                            urls.append(full_url)
             
-            # 简化日期筛选：取前50个链接
-            return urls[:50]
+            # 去重并返回
+            unique_urls = list(set(urls))
+            self.logger.debug(f"本页提取到 {len(unique_urls)} 个候选新闻链接")
+            return unique_urls
             
         except Exception as e:
             self.logger.error(f"提取新闻URL时出错: {e}")
             return []
+    
+    def _is_url_from_target_date(self, url: str, target_date_str: str) -> bool:
+        """检查URL是否包含目标日期信息"""
+        try:
+            # 从URL中查找日期模式
+            import re
+            
+            # 常见的日期模式
+            date_patterns = [
+                r'/(\d{4})/(\d{2})/(\d{2})/',  # /2025/08/24/
+                r'/d-(\d{7,})',  # /d-8077123 (detik的文章ID通常包含日期信息)
+                target_date_str.replace('-', ''),  # 20250824
+                target_date_str  # 2025-08-24
+            ]
+            
+            for pattern in date_patterns:
+                if re.search(pattern, url):
+                    return True
+            
+            return False
+            
+        except Exception:
+            return True  # 如果无法判断，默认包含
     
     def _crawl_article(self, url: str) -> Optional[Dict]:
         """爬取单篇新闻文章"""
