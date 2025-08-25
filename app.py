@@ -108,60 +108,104 @@ def run_crawler(target_date):
     global task_status
     
     try:
-        task_status['message'] = '正在初始化爬虫...'
-        task_status['progress'] = 10
+        # 步骤1: 初始化
+        task_status['message'] = '🔧 正在初始化爬虫组件...'
+        task_status['progress'] = 5
+        logger.info(f"开始爬取任务，目标日期: {target_date}")
         
         # 初始化组件
         config = ConfigManager()
+        task_status['progress'] = 10
+        task_status['message'] = '🔧 正在设置爬虫配置...'
+        
         crawler = DetikCrawler(config)
         processor = DataProcessor(config)
+        task_status['progress'] = 15
+        task_status['message'] = '✅ 爬虫初始化完成，开始Chrome设置...'
         
-        task_status['message'] = '开始爬取新闻...'
+        # 步骤2: 开始爬取
+        task_status['message'] = '🕷️ 正在启动Chrome浏览器...'
         task_status['progress'] = 20
+        
+        # 自定义进度回调
+        def progress_callback(current, total, message):
+            if total > 0:
+                crawl_progress = 20 + (current / total) * 50  # 20-70%的进度用于爬取
+                task_status['progress'] = int(crawl_progress)
+                task_status['current_news'] = current
+                task_status['total_news'] = total
+                task_status['message'] = message
         
         # 爬取新闻
         news_data = crawler.crawl_news(target_date)
         
         if not news_data:
             task_status['running'] = False
-            task_status['message'] = '未获取到新闻数据'
+            task_status['message'] = '❌ 未获取到新闻数据，请检查日期或网络连接'
+            task_status['progress'] = 0
+            logger.warning("爬取结果为空")
             return
         
         task_status['total_news'] = len(news_data)
+        task_status['current_news'] = len(news_data)
         task_status['progress'] = 70
-        task_status['message'] = f'爬取完成，共获取 {len(news_data)} 篇新闻'
+        task_status['message'] = f'✅ 爬取完成！共获取 {len(news_data)} 篇新闻'
+        logger.info(f"爬取成功，共获取 {len(news_data)} 篇新闻")
         
-        # 保存数据
-        task_status['message'] = '正在保存数据...'
-        task_status['progress'] = 80
+        # 步骤3: 保存数据
+        task_status['message'] = '💾 正在保存数据文件...'
+        task_status['progress'] = 75
         
         output_file = processor.save_news_data(news_data, target_date)
+        task_status['progress'] = 80
+        task_status['message'] = '✅ 数据文件保存完成'
         
         # 记录输出文件
         output_dir = config.get_output_dir()
         files = []
         for filename in os.listdir(output_dir):
-            if target_date in filename:
-                files.append({
-                    'name': filename,
-                    'size': os.path.getsize(os.path.join(output_dir, filename)),
-                    'url': f'/download/{filename}'
-                })
+            if target_date in filename and filename.endswith('.txt'):
+                file_path = os.path.join(output_dir, filename)
+                if os.path.exists(file_path):
+                    files.append({
+                        'name': filename,
+                        'size': os.path.getsize(file_path),
+                        'url': f'/download/{filename}'
+                    })
         
         task_status['output_files'] = files
-        task_status['progress'] = 90
+        task_status['progress'] = 85
+        logger.info(f"生成文件: {[f['name'] for f in files]}")
         
-        # 提交到GitHub（如果在云端环境）
+        # 步骤4: 提交到GitHub（如果在云端环境）
         if os.environ.get('RENDER'):
-            task_status['message'] = '正在提交到GitHub...'
+            task_status['message'] = '📤 正在上传到GitHub...'
+            task_status['progress'] = 90
             commit_to_github(target_date, files)
+            task_status['message'] = '✅ GitHub上传完成'
+            task_status['progress'] = 95
+        else:
+            task_status['progress'] = 95
         
+        # 完成
         task_status['progress'] = 100
-        task_status['message'] = f'任务完成！共爬取 {len(news_data)} 篇新闻'
+        task_status['message'] = f'🎉 任务完成！共爬取 {len(news_data)} 篇新闻，生成 {len(files)} 个文件'
+        logger.info(f"爬取任务完成: {len(news_data)}篇新闻, {len(files)}个文件")
         
     except Exception as e:
-        logger.error(f"爬虫任务失败: {e}")
-        task_status['message'] = f'任务失败: {str(e)}'
+        error_msg = str(e)
+        logger.error(f"爬虫任务失败: {error_msg}", exc_info=True)
+        task_status['message'] = f'❌ 任务失败: {error_msg}'
+        task_status['progress'] = 0
+        
+        # 根据错误类型提供更具体的提示
+        if 'ChromeDriver' in error_msg or 'Chrome' in error_msg:
+            task_status['message'] += ' (Chrome浏览器问题)'
+        elif 'timeout' in error_msg.lower():
+            task_status['message'] += ' (网络超时)'
+        elif 'connection' in error_msg.lower():
+            task_status['message'] += ' (网络连接问题)'
+            
     finally:
         task_status['running'] = False
 

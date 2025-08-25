@@ -102,32 +102,149 @@
         
         .progress-container {
             margin-top: 30px;
-            padding: 20px;
+            padding: 25px;
             background: #f8f9fa;
-            border-radius: 8px;
+            border-radius: 12px;
             display: none;
+            border: 1px solid #e9ecef;
+        }
+        
+        .progress-info {
+            margin-bottom: 25px;
+        }
+        
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .progress-header h3 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 1.3em;
+        }
+        
+        .progress-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 14px;
+        }
+        
+        .progress-stats span {
+            background: #fff;
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            color: #666;
+            font-weight: 500;
         }
         
         .progress-bar {
+            position: relative;
             width: 100%;
-            height: 20px;
+            height: 25px;
             background: #e0e0e0;
-            border-radius: 10px;
+            border-radius: 12px;
             overflow: hidden;
             margin-bottom: 15px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
         }
         
         .progress-fill {
             height: 100%;
             background: linear-gradient(90deg, #667eea, #764ba2);
             width: 0%;
-            transition: width 0.5s ease;
+            transition: width 0.3s ease;
+            position: relative;
+        }
+        
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #2c3e50;
+            font-weight: 600;
+            font-size: 12px;
+            z-index: 10;
         }
         
         .status-message {
             text-align: center;
             font-weight: 500;
             color: #2c3e50;
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        
+        .real-time-logs {
+            margin-top: 20px;
+        }
+        
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .logs-header h3 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 1.2em;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn-small:hover {
+            background: #c82333;
+        }
+        
+        .logs-content {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            border: 1px solid #333;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            word-wrap: break-word;
+        }
+        
+        .log-entry.error {
+            color: #ff6b6b;
+        }
+        
+        .log-entry.warning {
+            color: #ffd93d;
+        }
+        
+        .log-entry.info {
+            color: #74c0fc;
+        }
+        
+        .log-entry.success {
+            color: #51cf66;
         }
         
         .files-container {
@@ -222,10 +339,28 @@
             </button>
             
             <div id="progress-container" class="progress-container">
-                <div class="progress-bar">
-                    <div id="progress-fill" class="progress-fill"></div>
+                <div class="progress-info">
+                    <div class="progress-header">
+                        <h3>🔄 爬取进度</h3>
+                        <div id="progress-stats" class="progress-stats">
+                            <span id="current-step">准备开始</span>
+                            <span id="news-count">0/0 新闻</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                        <div id="progress-text" class="progress-text">0%</div>
+                    </div>
+                    <div id="status-message" class="status-message">等待开始...</div>
                 </div>
-                <div id="status-message" class="status-message">准备开始...</div>
+                
+                <div class="real-time-logs">
+                    <div class="logs-header">
+                        <h3>📋 实时日志</h3>
+                        <button id="clear-logs" class="btn-small" onclick="clearLogs()">清空</button>
+                    </div>
+                    <div id="real-time-logs" class="logs-content"></div>
+                </div>
             </div>
             
             <div id="files-container" class="files-container">
@@ -260,7 +395,9 @@
 
             document.getElementById('progress-container').style.display = 'block';
             document.getElementById('files-container').style.display = 'none';
-            document.getElementById('logs-container').style.display = 'block';
+            
+            // 添加初始日志
+            addLogEntry('🚀 开始爬取任务...', 'info');
 
             fetch('/start_crawl', {
                 method: 'POST',
@@ -290,8 +427,8 @@
                 fetch('/status')
                 .then(response => response.json())
                 .then(data => {
-                    updateProgress(data.progress);
-                    updateStatus(data.message);
+                    updateProgress(data.progress, data.message);
+                    updateStats(data);
                     
                     if (!data.running) {
                         clearInterval(interval);
@@ -300,34 +437,103 @@
                         if (data.output_files && data.output_files.length > 0) {
                             showFiles(data.output_files);
                             showAlert(`爬取完成！共获取 ${data.total_news} 篇新闻`, 'success');
+                            addLogEntry(`✅ 爬取任务完成！共获取 ${data.total_news} 篇新闻`, 'success');
+                        } else if (data.message && data.message.includes('失败')) {
+                            addLogEntry(`❌ 爬取任务失败: ${data.message}`, 'error');
                         }
                     }
                 })
                 .catch(error => {
                     console.error('获取状态失败:', error);
+                    addLogEntry(`❌ 状态获取失败: ${error.message}`, 'error');
                 });
                 
-                // 更新日志
-                updateLogs();
-            }, 2000);
+                // 更新实时日志
+                updateRealTimeLogs();
+            }, 1500);  // 缩短更新间隔到1.5秒
         }
 
-        function updateProgress(progress) {
+        function updateProgress(progress, message) {
             document.getElementById('progress-fill').style.width = progress + '%';
+            document.getElementById('progress-text').textContent = progress + '%';
+            document.getElementById('status-message').textContent = message || '处理中...';
         }
 
-        function updateStatus(message) {
-            document.getElementById('status-message').textContent = message;
+        function updateStats(data) {
+            // 更新当前步骤
+            let currentStep = '准备中';
+            if (data.progress >= 10 && data.progress < 20) {
+                currentStep = '初始化爬虫';
+            } else if (data.progress >= 20 && data.progress < 70) {
+                currentStep = '爬取新闻中';
+            } else if (data.progress >= 70 && data.progress < 90) {
+                currentStep = '保存数据';
+            } else if (data.progress >= 90 && data.progress < 100) {
+                currentStep = '上传GitHub';
+            } else if (data.progress >= 100) {
+                currentStep = '任务完成';
+            }
+            
+            document.getElementById('current-step').textContent = currentStep;
+            
+            // 更新新闻计数
+            const newsCount = `${data.current_news || 0}/${data.total_news || 0} 新闻`;
+            document.getElementById('news-count').textContent = newsCount;
         }
 
-        function updateLogs() {
+        function updateRealTimeLogs() {
             fetch('/logs')
             .then(response => response.json())
             .then(data => {
-                const logsContent = document.getElementById('logs-content');
-                logsContent.innerHTML = data.logs.join('<br>');
-                logsContent.scrollTop = logsContent.scrollHeight;
+                const logsContainer = document.getElementById('real-time-logs');
+                if (data.logs && data.logs.length > 0) {
+                    // 只显示最后30条日志
+                    const recentLogs = data.logs.slice(-30);
+                    logsContainer.innerHTML = '';
+                    
+                    recentLogs.forEach(log => {
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+                        
+                        // 根据日志内容设置颜色
+                        if (log.includes('ERROR') || log.includes('失败') || log.includes('错误')) {
+                            logEntry.className += ' error';
+                        } else if (log.includes('WARNING') || log.includes('警告')) {
+                            logEntry.className += ' warning';
+                        } else if (log.includes('成功') || log.includes('完成') || log.includes('SUCCESS')) {
+                            logEntry.className += ' success';
+                        } else {
+                            logEntry.className += ' info';
+                        }
+                        
+                        logEntry.textContent = log;
+                        logsContainer.appendChild(logEntry);
+                    });
+                    
+                    // 自动滚动到底部
+                    logsContainer.scrollTop = logsContainer.scrollHeight;
+                }
+            })
+            .catch(error => {
+                console.error('获取日志失败:', error);
             });
+        }
+
+        function addLogEntry(message, type = 'info') {
+            const logsContainer = document.getElementById('real-time-logs');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            logsContainer.appendChild(logEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('real-time-logs').innerHTML = '';
+            addLogEntry('📋 日志已清空', 'info');
         }
 
         function showFiles(files) {
