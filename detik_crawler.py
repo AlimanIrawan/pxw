@@ -10,6 +10,7 @@ import os
 import requests
 from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -242,6 +243,17 @@ class DetikCrawler:
         """
         self.logger.info(f"开始爬取 {target_date} 的新闻数据")
         
+        # 首先尝试Chrome模式
+        try:
+            self.logger.info("尝试使用Chrome模式（完整功能）")
+            return self._crawl_with_chrome(target_date)
+        except Exception as e:
+            self.logger.warning(f"Chrome模式失败: {e}")
+            self.logger.info("切换到requests模式（保持日期筛选功能）")
+            return self._crawl_with_requests(target_date)
+    
+    def _crawl_with_chrome(self, target_date: str) -> List[Dict]:
+        """使用Chrome WebDriver爬取（原有逻辑）"""
         driver = None
         try:
             # 设置WebDriver
@@ -271,15 +283,49 @@ class DetikCrawler:
                 # 请求延迟
                 time.sleep(self.request_delay)
             
-            self.logger.info(f"爬取完成，共获取 {len(news_data)} 篇新闻")
+            self.logger.info(f"Chrome模式爬取完成，共获取 {len(news_data)} 篇新闻")
             return news_data
             
         except Exception as e:
-            self.logger.error(f"爬取新闻时出错: {e}", exc_info=True)
-            return []
+            self.logger.error(f"Chrome模式爬取时出错: {e}", exc_info=True)
+            raise  # 重新抛出异常，让主方法切换到requests模式
         finally:
             if driver:
                 driver.quit()
+    
+    def _crawl_with_requests(self, target_date: str) -> List[Dict]:
+        """使用requests爬取（保持日期筛选逻辑）"""
+        try:
+            # 获取新闻列表页面的URL列表
+            news_urls = self._get_news_urls_with_requests(target_date)
+            
+            if not news_urls:
+                self.logger.warning(f"未找到 {target_date} 的新闻链接")
+                return []
+            
+            self.logger.info(f"找到 {len(news_urls)} 个新闻链接")
+            
+            # 爬取每篇新闻的详细内容
+            news_data = []
+            for i, url in enumerate(news_urls, 1):
+                self.logger.info(f"正在爬取第 {i}/{len(news_urls)} 篇新闻: {url}")
+                
+                article_data = self._crawl_article_with_requests(url)
+                if article_data:
+                    news_data.append(article_data)
+                    self.logger.debug(f"成功爬取新闻: {article_data['title'][:50]}...")
+                else:
+                    self.logger.warning(f"爬取新闻失败: {url}")
+                
+                # 请求延迟
+                time.sleep(self.request_delay)
+            
+            self.logger.info(f"requests模式爬取完成，共获取 {len(news_data)} 篇新闻")
+            return news_data
+            
+        except Exception as e:
+            self.logger.error(f"requests模式爬取失败: {e}")
+            return []
     
     def _get_news_urls(self, driver: webdriver.Chrome, target_date: str) -> List[str]:
         """获取指定日期的新闻URL列表
@@ -979,3 +1025,244 @@ class DetikCrawler:
                     return self._clean_text(raw_text)
         
         return None
+    
+    # ===== 使用requests的方法（Chrome失败时的备用方案）=====
+    
+    def _get_news_urls_with_requests(self, target_date: str) -> List[str]:
+        """使用requests获取指定日期的新闻URL列表（保持原有的日期筛选逻辑）"""
+        try:
+            target_date_obj = datetime.strptime(target_date, '%Y-%m-%d')
+            all_urls = []
+            page = 1
+            consecutive_empty_pages = 0
+            found_target_news = False
+            
+            self.logger.info(f"开始使用requests爬取 {target_date} 的新闻，从第{page}页开始")
+            
+            while True:
+                url = f"{self.base_url}/indeks?page={page}"
+                self.logger.info(f"正在爬取第 {page} 页: {url}")
+                
+                try:
+                    response = self.session.get(url, timeout=self.request_timeout)
+                    response.raise_for_status()
+                    
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    page_urls = self._extract_news_urls_with_requests(soup, target_date_obj)
+                    
+                    if not page_urls:
+                        consecutive_empty_pages += 1
+                        self.logger.info(f"第 {page} 页没有找到目标日期的新闻")
+                        
+                        # 如果已经找到过目标日期的新闻，现在又没有了，说明已经过了目标日期，直接停止
+                        if found_target_news:
+                            self.logger.info(f"已找到目标日期新闻后出现空页，说明已过目标日期，停止爬取")
+                            break
+                        
+                        # 如果从开始就连续20页都没有找到目标日期的新闻，停止爬取
+                        if consecutive_empty_pages >= 20:
+                            self.logger.info(f"连续{consecutive_empty_pages}页没有找到目标日期的新闻，停止爬取")
+                            break
+                    else:
+                        consecutive_empty_pages = 0
+                        found_target_news = True
+                        # 添加到总列表，去重
+                        new_urls = [url for url in page_urls if url not in all_urls]
+                        all_urls.extend(new_urls)
+                        
+                        self.logger.info(f"第 {page} 页找到 {len(new_urls)} 个目标日期的新闻链接")
+                    
+                    page += 1
+                    
+                    # 安全限制：最多爬取50页
+                    if page > 50:
+                        self.logger.info("已达到最大页面数限制（50页），停止爬取")
+                        break
+                    
+                    time.sleep(1)  # 页面间延迟
+                    
+                except Exception as e:
+                    self.logger.error(f"爬取第 {page} 页失败: {e}")
+                    consecutive_empty_pages += 1
+                    if consecutive_empty_pages >= 5:
+                        break
+                    continue
+            
+            self.logger.info(f"requests模式共找到 {len(all_urls)} 个新闻链接")
+            return all_urls
+            
+        except Exception as e:
+            self.logger.error(f"使用requests获取新闻URL列表时出错: {e}")
+            return []
+    
+    def _extract_news_urls_with_requests(self, soup: BeautifulSoup, target_date: datetime) -> List[str]:
+        """从BeautifulSoup对象中提取新闻URL并按时间筛选"""
+        news_urls = []
+        
+        try:
+            # 查找所有新闻项目容器
+            news_items = soup.select("article, .media, .list-content__item, .media-artikel")
+            
+            for item in news_items:
+                try:
+                    # 查找新闻链接
+                    link_element = item.select_one("a[href*='/berita/']")
+                    if not link_element:
+                        continue
+                    
+                    href = link_element.get('href')
+                    if not href:
+                        continue
+                    
+                    # 构建完整URL
+                    if href.startswith('/'):
+                        full_url = urljoin(self.base_url, href)
+                    elif href.startswith('http'):
+                        full_url = href
+                    else:
+                        continue
+                    
+                    # 只处理 news.detik.com/berita 开头的链接
+                    if not full_url.startswith('https://news.detik.com/berita'):
+                        continue
+                    
+                    # 查找时间信息
+                    time_element = item.select_one(".media__date, .list-content__date, [class*='date'], [class*='time'], time")
+                    title_element = item.select_one(".media__title, .list-content__title, h2, h3, h4, a")
+                    
+                    time_text = time_element.get_text(strip=True) if time_element else ""
+                    title_text = title_element.get_text(strip=True) if title_element else ""
+                    
+                    # 使用原有的时间解析逻辑
+                    if self._parse_time_info(time_text, title_text, target_date):
+                        news_urls.append(full_url)
+                        self.logger.debug(f"找到目标日期新闻: {title_text[:50]}...")
+                    
+                except Exception as e:
+                    self.logger.debug(f"处理新闻项目时出错: {e}")
+                    continue
+            
+            return news_urls
+            
+        except Exception as e:
+            self.logger.error(f"从页面提取新闻URL时出错: {e}")
+            return []
+    
+    def _crawl_article_with_requests(self, url: str) -> Optional[Dict]:
+        """使用requests爬取单篇新闻文章"""
+        # 只处理 https://news.detik.com/berita 开头的链接
+        if not url.startswith('https://news.detik.com/berita'):
+            self.logger.info(f"跳过不符合条件的链接: {url}")
+            return None
+        
+        for attempt in range(self.max_retries):
+            try:
+                response = self.session.get(url, timeout=self.request_timeout)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # 提取标题
+                title = self._extract_title_with_requests(soup)
+                if not title:
+                    continue
+                
+                # 提取发布时间
+                publish_time = self._extract_publish_time_with_requests(soup)
+                
+                # 提取正文内容
+                content = self._extract_content_with_requests(soup)
+                if not content:
+                    continue
+                
+                # 生成文章ID
+                article_id = len(url.split('/'))  # 简单的ID生成
+                
+                return {
+                    'id': article_id,
+                    'title': title.strip(),
+                    'publish_time': publish_time.strip() if publish_time else '',
+                    'content': content.strip(),
+                    'url': url,
+                    'word_count': len(content.split())
+                }
+                
+            except Exception as e:
+                self.logger.warning(f"爬取文章失败 (尝试 {attempt + 1}/{self.max_retries}): {url}, 错误: {e}")
+                if attempt < self.max_retries - 1:
+                    time.sleep(2 ** attempt)
+        
+        return None
+    
+    def _extract_title_with_requests(self, soup: BeautifulSoup) -> Optional[str]:
+        """使用BeautifulSoup提取新闻标题"""
+        selectors = [
+            'h1.detail__title',
+            'h1[class*="title"]',
+            '.detail__title',
+            'h1',
+            '.entry-title'
+        ]
+        
+        for selector in selectors:
+            title_elem = soup.select_one(selector)
+            if title_elem:
+                return title_elem.get_text(strip=True)
+        
+        return None
+    
+    def _extract_publish_time_with_requests(self, soup: BeautifulSoup) -> Optional[str]:
+        """使用BeautifulSoup提取发布时间"""
+        selectors = [
+            '.detail__date',
+            '[class*="date"]',
+            '[class*="time"]',
+            'time',
+            '.published-date'
+        ]
+        
+        for selector in selectors:
+            time_elem = soup.select_one(selector)
+            if time_elem:
+                datetime_attr = time_elem.get('datetime')
+                if datetime_attr:
+                    return datetime_attr
+                return time_elem.get_text(strip=True)
+        
+        return None
+    
+    def _extract_content_with_requests(self, soup: BeautifulSoup) -> Optional[str]:
+        """使用BeautifulSoup提取新闻正文内容"""
+        selectors = [
+            '.detail__body-text',
+            '.itp_bodycontent',
+            '.detail-content',
+            '[class*="content"]',
+            '.entry-content'
+        ]
+        
+        for selector in selectors:
+            content_elem = soup.select_one(selector)
+            if content_elem:
+                # 移除不需要的元素
+                for unwanted in content_elem.select('script, style, .ads, .advertisement'):
+                    unwanted.decompose()
+                
+                # 获取文本内容
+                text = content_elem.get_text(separator='\n', strip=True)
+                if text and len(text) > 50:
+                    return self._clean_text_requests(text)
+        
+        return None
+    
+    def _clean_text_requests(self, text: str) -> str:
+        """清理文本内容（requests版本）"""
+        if not text:
+            return ""
+        
+        # 移除多余的空白字符
+        import re
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\n\s*\n', '\n\n', text)
+        
+        return text.strip()

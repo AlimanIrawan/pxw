@@ -15,7 +15,6 @@ import schedule
 import time
 
 from detik_crawler import DetikCrawler
-from simple_crawler import SimpleCrawler
 from data_processor import DataProcessor
 from config import ConfigManager
 from logger import get_logger
@@ -154,27 +153,18 @@ def run_crawler(target_date):
         crawler = None
         use_simple_crawler = False
         
-        if os.environ.get('RENDER'):
-            # 云端环境：直接使用简化爬虫
-            task_status['message'] = '🔧 云端环境，使用简化爬虫...'
-            add_task_log("☁️ 检测到云端环境，使用简化爬虫")
-            crawler = SimpleCrawler(config)
-            use_simple_crawler = True
+        # 使用统一的DetikCrawler（内置Chrome和requests双模式）
+        try:
+            task_status['message'] = '🚀 正在初始化智能爬虫...'
+            add_task_log("🌐 初始化DetikCrawler（支持Chrome和requests双模式）")
+            crawler = DetikCrawler(config)
             task_status['progress'] = 20
-        else:
-            # 本地环境：尝试Chrome爬虫
-            try:
-                task_status['message'] = '🕷️ 正在启动Chrome浏览器...'
-                add_task_log("🌐 本地环境，尝试启动Chrome爬虫")
-                crawler = DetikCrawler(config)
-                task_status['progress'] = 20
-            except Exception as e:
-                add_task_log(f"⚠️ Chrome爬虫初始化失败: {e}", "warning")
-                task_status['message'] = '🔧 Chrome失败，使用简化爬虫...'
-                add_task_log("🔄 切换到简化爬虫")
-                crawler = SimpleCrawler(config)
-                use_simple_crawler = True
-                task_status['progress'] = 20
+            add_task_log("✅ DetikCrawler初始化成功")
+        except Exception as e:
+            add_task_log(f"❌ DetikCrawler初始化失败: {e}", "error")
+            task_status['running'] = False
+            task_status['message'] = '❌ 爬虫初始化失败'
+            return
         
         # 自定义进度回调
         def progress_callback(current, total, message):
