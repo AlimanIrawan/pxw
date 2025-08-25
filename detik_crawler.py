@@ -472,13 +472,14 @@ class DetikCrawler:
                 'Sabtu': 'Saturday'
             }
             
-            # 优先使用title中的绝对时间格式
-            if title_text and ('WIB' in title_text or 'WITA' in title_text or 'WIT' in title_text):
-                self.logger.debug(f"解析绝对时间格式: {title_text}")
+            # 检查绝对时间格式 - 同时检查time_text和title_text
+            text_to_check = time_text if time_text else title_text
+            if text_to_check and ('WIB' in text_to_check or 'WITA' in text_to_check or 'WIT' in text_to_check):
+                self.logger.info(f"🔍 解析绝对时间格式: {text_to_check}")
                 
                 # 格式1: Minggu, 03 Agu 2025 13:54 WIB
                 pattern1 = r'\w+,\s*(\d{1,2})\s+(\w+)\s+(\d{4})\s+\d{1,2}:\d{2}\s+WI[BTA]'
-                match1 = re.search(pattern1, title_text)
+                match1 = re.search(pattern1, text_to_check)
                 if match1:
                     day, month_str, year = match1.groups()
                     if month_str in month_map:
@@ -486,14 +487,16 @@ class DetikCrawler:
                             news_date = datetime(int(year), month_map[month_str], int(day))
                             is_match = news_date.date() == target_date.date()
                             if is_match:
-                                self.logger.info(f"找到匹配日期(格式1): {title_text}")
+                                self.logger.info(f"✅ 找到匹配日期(格式1): {text_to_check}")
+                            else:
+                                self.logger.info(f"❌ 日期不匹配(格式1): {news_date.date()} vs {target_date.date()}")
                             return is_match
                         except ValueError as e:
-                            self.logger.debug(f"解析日期失败: {e}")
+                            self.logger.info(f"⚠️ 解析日期失败: {e}")
                 
                 # 格式2: 03 Agustus 2025, 13:54 WIB
                 pattern2 = r'(\d{1,2})\s+(\w+)\s+(\d{4}),\s*\d{1,2}:\d{2}\s+WI[BTA]'
-                match2 = re.search(pattern2, title_text)
+                match2 = re.search(pattern2, text_to_check)
                 if match2:
                     day, month_str, year = match2.groups()
                     if month_str in month_map:
@@ -501,24 +504,30 @@ class DetikCrawler:
                             news_date = datetime(int(year), month_map[month_str], int(day))
                             is_match = news_date.date() == target_date.date()
                             if is_match:
-                                self.logger.info(f"找到匹配日期(格式2): {title_text}")
+                                self.logger.info(f"✅ 找到匹配日期(格式2): {text_to_check}")
+                            else:
+                                self.logger.info(f"❌ 日期不匹配(格式2): {news_date.date()} vs {target_date.date()}")
                             return is_match
                         except ValueError as e:
-                            self.logger.debug(f"解析日期失败: {e}")
+                            self.logger.info(f"⚠️ 解析日期失败: {e}")
                 
                 # 格式3: 2025-08-03 13:54:00
                 pattern3 = r'(\d{4})-(\d{1,2})-(\d{1,2})\s+\d{1,2}:\d{2}:\d{2}'
-                match3 = re.search(pattern3, title_text)
+                match3 = re.search(pattern3, text_to_check)
                 if match3:
                     year, month, day = match3.groups()
                     try:
                         news_date = datetime(int(year), int(month), int(day))
                         is_match = news_date.date() == target_date.date()
                         if is_match:
-                            self.logger.info(f"找到匹配日期(格式3): {title_text}")
+                            self.logger.info(f"✅ 找到匹配日期(格式3): {text_to_check}")
+                        else:
+                            self.logger.info(f"❌ 日期不匹配(格式3): {news_date.date()} vs {target_date.date()}")
                         return is_match
                     except ValueError as e:
-                        self.logger.debug(f"解析日期失败: {e}")
+                        self.logger.info(f"⚠️ 解析日期失败: {e}")
+                
+                self.logger.info(f"⚠️ 未匹配任何绝对时间格式: {text_to_check}")
             
             # 处理相对时间格式（增强版）
             if 'yang lalu' in time_text or 'lalu' in time_text:
