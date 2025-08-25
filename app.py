@@ -81,7 +81,6 @@ def start_crawl():
         return jsonify({'error': '请选择日期'})
     
     # 重置任务状态
-    global task_status
     task_status = {
         'running': True,
         'progress': 0,
